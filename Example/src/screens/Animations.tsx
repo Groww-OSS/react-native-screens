@@ -120,9 +120,8 @@ const NavigateScreen = ({
 const Stack = createNativeStackNavigator<StackParamList>();
 
 const App = (): JSX.Element => {
-  const [stackAnimation, setStackAnimation] = useState<StackAnimation>(
-    'default'
-  );
+  const [stackAnimation, setStackAnimation] =
+    useState<StackAnimation>('default');
   return (
     <Stack.Navigator
       screenOptions={{
@@ -189,7 +188,7 @@ const App = (): JSX.Element => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 100,
+    paddingTop: 10,
   },
 });
 

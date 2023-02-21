@@ -47,6 +47,7 @@ export type BlurEffectTypes =
   | 'systemThickMaterialDark'
   | 'systemChromeMaterialDark';
 export type ScreenReplaceTypes = 'push' | 'pop';
+export type SwipeDirectionTypes = 'vertical' | 'horizontal';
 export type ScreenOrientationTypes =
   | 'default'
   | 'all'
@@ -69,9 +70,18 @@ export type TransitionProgressEventType = {
   goingForward: number;
 };
 
+export type GestureResponseDistanceType = {
+  start?: number;
+  end?: number;
+  top?: number;
+  bottom?: number;
+};
+
+export type SheetDetentTypes = 'medium' | 'large' | 'all';
+
 export interface ScreenProps extends ViewProps {
-  active?: 0 | 1 | Animated.AnimatedInterpolation;
-  activityState?: 0 | 1 | 2 | Animated.AnimatedInterpolation;
+  active?: 0 | 1 | Animated.AnimatedInterpolation<number>;
+  activityState?: 0 | 1 | 2 | Animated.AnimatedInterpolation<number>;
   children?: React.ReactNode;
   /**
    * Boolean indicating that swipe dismissal should trigger animation provided by `stackAnimation`. Defaults to `false`.
@@ -88,6 +98,11 @@ export interface ScreenProps extends ViewProps {
    */
   isNativeStack?: boolean;
   /**
+   * Whether inactive screens should be suspended from re-rendering. Defaults to `false`.
+   * When `enableFreeze()` is run at the top of the application defaults to `true`.
+   */
+  freezeOnBlur?: boolean;
+  /**
    * Boolean indicating whether the swipe gesture should work on whole screen. Swiping with this option results in the same transition animation as `simple_push` by default.
    * It can be changed to other custom animations with `customAnimationOnSwipe` prop, but default iOS swipe animation is not achievable due to usage of custom recognizer.
    * Defaults to `false`.
@@ -102,6 +117,24 @@ export interface ScreenProps extends ViewProps {
    */
   gestureEnabled?: boolean;
   /**
+   * Use it to restrict the distance from the edges of screen in which the gesture should be recognized. To be used alongside `fullScreenSwipeEnabled`.
+   *
+   * @platform ios
+   */
+  gestureResponseDistance?: GestureResponseDistanceType;
+  /**
+   * Whether the home indicator should be hidden on this screen. Defaults to `false`.
+   *
+   * @platform ios
+   */
+  homeIndicatorHidden?: boolean;
+  /**
+   * Whether the keyboard should hide when swiping to the previous screen. Defaults to `false`.
+   *
+   * @platform ios
+   */
+  hideKeyboardOnSwipe?: boolean;
+  /**
    * Boolean indicating whether, when the Android default back button is clicked, the `pop` action should be performed on the native side or on the JS side to be able to prevent it.
    * Unfortunately the same behavior is not available on iOS since the behavior of native back button cannot be changed there.
    * Defaults to `false`.
@@ -109,6 +142,18 @@ export interface ScreenProps extends ViewProps {
    * @platform android
    */
   nativeBackButtonDismissalEnabled?: boolean;
+  /**
+   * Sets the navigation bar color. Defaults to initial status bar color.
+   *
+   * @platform android
+   */
+  navigationBarColor?: string;
+  /**
+   * Sets the visibility of the navigation bar. Defaults to `false`.
+   *
+   * @platform android
+   */
+  navigationBarHidden?: boolean;
   /**
    * A callback that gets called when the current screen appears.
    */
@@ -130,6 +175,14 @@ export interface ScreenProps extends ViewProps {
    */
   onHeaderBackButtonClicked?: () => void;
   /**
+   * An internal callback called when screen is dismissed by gesture or by native header back button and `preventNativeDismiss` is set to `true`.
+   *
+   * @platform ios
+   */
+  onNativeDismissCancelled?: (
+    e: NativeSyntheticEvent<{ dismissCount: number }>
+  ) => void;
+  /**
    * An internal callback called every frame during the transition of screens of `native-stack`, used to feed transition context.
    */
   onTransitionProgress?: (
@@ -143,6 +196,13 @@ export interface ScreenProps extends ViewProps {
    * A callback that gets called when the current screen will disappear. This is called as soon as the transition begins.
    */
   onWillDisappear?: (e: NativeSyntheticEvent<TargetedEvent>) => void;
+  /**
+   * Boolean indicating whether to prevent current screen from being dismissed.
+   * Defaults to `false`.
+   *
+   * @platform ios
+   */
+  preventNativeDismiss?: boolean;
   ref?: React.Ref<View>;
   /**
    * How should the screen replacing another screen animate. Defaults to `pop`.
@@ -164,6 +224,60 @@ export interface ScreenProps extends ViewProps {
    * - "landscape_right" – landscape-right orientation is permitted
    */
   screenOrientation?: ScreenOrientationTypes;
+  /**
+   * Describes heights where a sheet can rest.
+   * Works only when `stackPresentation` is set to `formSheet`.
+   * Defaults to `large`.
+   *
+   * Available values:
+   *
+   * - `large` - only large detent level will be allowed
+   * - `medium` - only medium detent level will be allowed
+   * - `all` - all detent levels will be allowed
+   *
+   * @platform ios
+   */
+  sheetAllowedDetents?: SheetDetentTypes;
+  /**
+   * Whether the sheet should expand to larger detent when scrolling.
+   * Works only when `stackPresentation` is set to `formSheet`.
+   * Defaults to `true`.
+   */
+  sheetExpandsWhenScrolledToEdge?: boolean;
+  /**
+   * The corner radius that the sheet will try to render with.
+   * Works only when `stackPresentation` is set to `formSheet`.
+   *
+   * If set to non-negative value it will try to render sheet with provided radius, else ti will apply system default.
+   *
+   * If left unset system default is used.
+   *
+   * @platform ios
+   */
+  sheetCornerRadius?: number;
+  /**
+   * Boolean indicating whether the sheet shows a grabber at the top.
+   * Works only when `stackPresentation` is set to `formSheet`.
+   * Defaults to `false`.
+   *
+   * @platform ios
+   */
+  sheetGrabberVisible?: boolean;
+  /**
+   * The largest sheet detent for which a view underneath won't be dimmed.
+   * Works only when `stackPresentation` is set to `formSheet`.
+   *
+   * If this prop is set to:
+   *
+   * - `large` - the view underneath won't be dimmed at any detent level
+   * - `medium` - the view underneath will be dimmed only when detent level is `large`
+   * - `all` - the view underneath will be dimmed for any detent level
+   *
+   * Defaults to `all`.
+   *
+   * @platform ios
+   */
+  sheetLargestUndimmedDetent?: SheetDetentTypes;
   /**
    * How the screen should appear/disappear when pushed or popped at the top of the stack.
    * The following values are currently supported:
@@ -214,6 +328,23 @@ export interface ScreenProps extends ViewProps {
    * @platform android
    */
   statusBarTranslucent?: boolean;
+  /**
+   * Sets the direction in which you should swipe to dismiss the screen.
+   * When using `vertical` option, options `fullScreenSwipeEnabled: true`, `customAnimationOnSwipe: true` and `stackAnimation: 'slide_from_bottom'` are set by default.
+   * The following values are supported:
+   * - `vertical` – dismiss screen vertically
+   * - `horizontal` – dismiss screen horizontally (default)
+   *
+   * @platform ios
+   */
+  swipeDirection?: SwipeDirectionTypes;
+  /**
+   * Changes the duration (in milliseconds) of `slide_from_bottom`, `fade_from_bottom`, `fade` and `simple_push` transitions on iOS. Defaults to `350`.
+   * The duration of `default` and `flip` transitions isn't customizable.
+   *
+   * @platform ios
+   */
+  transitionDuration?: number;
 }
 
 export interface ScreenContainerProps extends ViewProps {
@@ -332,6 +463,14 @@ export interface ScreenStackHeaderConfigProps extends ViewProps {
    */
   largeTitleHideShadow?: boolean;
   /**
+   * Callback which is executed when screen header is attached
+   */
+  onAttached?: () => void;
+  /**
+   * Callback which is executed when screen header is detached
+   */
+  onDetached?: () => void;
+  /**
    * String that can be displayed in the header as a fallback for `headerTitle`.
    */
   title?: string;
@@ -372,23 +511,52 @@ export interface SearchBarProps {
    */
   autoCapitalize?: 'none' | 'words' | 'sentences' | 'characters';
   /**
+   * Automatically focuses search bar on mount
+   *
+   * @platform android
+   */
+  autoFocus?: boolean;
+  /**
    * The search field background color
    */
   barTintColor?: string;
   /**
+   * The color for the cursor caret and cancel button text.
+   *
+   * @platform ios
+   */
+  tintColor?: string;
+  /**
    * The text to be used instead of default `Cancel` button text
+   *
+   * @platform ios
    */
   cancelButtonText?: string;
-
+  /**
+   * Specifies whether the back button should close search bar's text input or not.
+   *
+   * @platform android
+   */
+  disableBackButtonOverride?: boolean;
   /**
    * Indicates whether to hide the navigation bar
+   *
+   * @platform ios
    */
   hideNavigationBar?: boolean;
   /**
    * Indicates whether to hide the search bar when scrolling
+   *
+   * @platform ios
    */
   hideWhenScrolling?: boolean;
 
+  /**
+   * Sets type of the input. Defaults to `text`.
+   *
+   * @platform android
+   */
+  inputType?: 'text' | 'phone' | 'number' | 'email';
   /**
    * Indicates whether to to obscure the underlying content
    */
@@ -399,6 +567,8 @@ export interface SearchBarProps {
   onBlur?: (e: NativeSyntheticEvent<TargetedEvent>) => void;
   /**
    * A callback that gets called when the cancel button is pressed
+   *
+   * @platform ios
    */
   onCancelButtonPress?: (e: NativeSyntheticEvent<TargetedEvent>) => void;
 
@@ -408,9 +578,21 @@ export interface SearchBarProps {
   onChangeText?: (e: NativeSyntheticEvent<TextInputFocusEventData>) => void;
 
   /**
+   * A callback that gets called when search bar is closed
+   *
+   * @platform android
+   */
+  onClose?: () => void;
+  /**
    * A callback that gets called when search bar has received focus
    */
   onFocus?: (e: NativeSyntheticEvent<TargetedEvent>) => void;
+  /**
+   * A callback that gets called when search bar is opened
+   *
+   * @platform android
+   */
+  onOpen?: () => void;
   /**
    * A callback that gets called when the search button is pressed. It receives the current text value of the search bar.
    */
@@ -425,4 +607,23 @@ export interface SearchBarProps {
    * The search field text color
    */
   textColor?: string;
+  /**
+   * The search hint text color
+   *
+   * @plaform android
+   */
+  hintTextColor?: string;
+  /**
+   * The search and close icon color shown in the header
+   *
+   * @plaform android
+   */
+  headerIconColor?: string;
+  /**
+   * Show the search hint icon when search bar is focused
+   *
+   * @plaform android
+   * @default true
+   */
+  shouldShowHintSearchIcon?: boolean;
 }

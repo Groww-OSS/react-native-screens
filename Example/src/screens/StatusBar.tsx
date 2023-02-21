@@ -30,9 +30,8 @@ interface FirstScreenProps {
 const FirstScreen = ({ navigation }: FirstScreenProps): JSX.Element => {
   const [statusBarStyle, setStatusBarStyle] = useState<StatusBarStyle>('auto');
   const [statusBarHidden, setStatusBarHidden] = useState(false);
-  const [statusBarAnimation, setStatusBarAnimation] = useState<
-    StatusBarAnimation
-  >('fade');
+  const [statusBarAnimation, setStatusBarAnimation] =
+    useState<StatusBarAnimation>('fade');
   const [statusBarTranslucent, setStatusBarTranslucent] = useState(true);
   const [statusBarColor, setStatusBarColor] = useState('gray');
 
@@ -137,7 +136,7 @@ const App = (): JSX.Element => (
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 100,
+    paddingTop: 10,
   },
   heading: {
     marginLeft: 10,

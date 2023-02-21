@@ -1,6 +1,5 @@
 package com.swmansion.rnscreens
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.PorterDuff
 import android.os.Build
@@ -17,11 +16,14 @@ import androidx.fragment.app.Fragment
 import com.facebook.react.ReactApplication
 import com.facebook.react.bridge.JSApplicationIllegalArgumentException
 import com.facebook.react.bridge.ReactContext
+import com.facebook.react.bridge.WritableMap
+import com.facebook.react.uimanager.events.RCTEventEmitter
 import com.facebook.react.views.text.ReactTypefaceUtils
 
 class ScreenStackHeaderConfig(context: Context) : ViewGroup(context) {
     private val mConfigSubviews = ArrayList<ScreenStackHeaderSubview>(3)
-    val toolbar: Toolbar
+    val toolbar: CustomToolbar
+    private var headerTopInset: Int? = null
     private var mTitle: String? = null
     private var mTitleColor = 0
     private var mTitleFontFamily: String? = null
@@ -62,6 +64,11 @@ class ScreenStackHeaderConfig(context: Context) : ViewGroup(context) {
         }
     }
 
+    private fun sendEvent(eventName: String, eventContent: WritableMap?) {
+        (context as ReactContext).getJSModule(RCTEventEmitter::class.java)
+            ?.receiveEvent(id, eventName, eventContent)
+    }
+
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
         // no-op
     }
@@ -73,33 +80,30 @@ class ScreenStackHeaderConfig(context: Context) : ViewGroup(context) {
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         mIsAttachedToWindow = true
+        sendEvent("onAttached", null)
+        // we want to save the top inset before the status bar can be hidden, which would resolve in
+        // inset being 0
+        if (headerTopInset == null) {
+            headerTopInset = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+                rootWindowInsets.systemWindowInsetTop
+            else
+            // Hacky fallback for old android. Before Marshmallow, the status bar height was always 25
+                (25 * resources.displayMetrics.density).toInt()
+        }
         onUpdate()
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         mIsAttachedToWindow = false
+        sendEvent("onDetached", null)
     }
 
     private val screen: Screen?
-        get() {
-            val screen = parent
-            return if (screen is Screen) {
-                screen
-            } else null
-        }
+        get() = parent as? Screen
     private val screenStack: ScreenStack?
-        get() {
-            val screen = screen
-            if (screen != null) {
-                val container = screen.container
-                if (container is ScreenStack) {
-                    return container
-                }
-            }
-            return null
-        }
-    private val screenFragment: ScreenStackFragment?
+        get() = screen?.container as? ScreenStack
+    val screenFragment: ScreenStackFragment?
         get() {
             val screen = parent
             if (screen is Screen) {
@@ -111,15 +115,16 @@ class ScreenStackHeaderConfig(context: Context) : ViewGroup(context) {
             return null
         }
 
-    @SuppressLint("ObsoleteSdkInt") // to be removed when support for < 0.64 is dropped
     fun onUpdate() {
         val stack = screenStack
         val isTop = stack == null || stack.topScreen == parent
+
         if (!mIsAttachedToWindow || !isTop || mDestroyed) {
             return
         }
+
         val activity = screenFragment?.activity as AppCompatActivity? ?: return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && mDirection != null) {
+        if (mDirection != null) {
             if (mDirection == "rtl") {
                 toolbar.layoutDirection = LAYOUT_DIRECTION_RTL
             } else if (mDirection == "ltr") {
@@ -140,27 +145,28 @@ class ScreenStackHeaderConfig(context: Context) : ViewGroup(context) {
             }
             ScreenWindowTraits.trySetWindowTraits(it, activity, reactContext)
         }
+
         if (mIsHidden) {
             if (toolbar.parent != null) {
                 screenFragment?.removeToolbar()
             }
             return
         }
+
         if (toolbar.parent == null) {
             screenFragment?.setToolbar(toolbar)
         }
+
         if (mIsTopInsetEnabled) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                toolbar.setPadding(0, rootWindowInsets.systemWindowInsetTop, 0, 0)
-            } else {
-                // Hacky fallback for old android. Before Marshmallow, the status bar height was always 25
-                toolbar.setPadding(0, (25 * resources.displayMetrics.density).toInt(), 0, 0)
+            headerTopInset.let {
+                toolbar.setPadding(0, it ?: 0, 0, 0)
             }
         } else {
             if (toolbar.paddingTop > 0) {
                 toolbar.setPadding(0, 0, 0, 0)
             }
         }
+
         activity.setSupportActionBar(toolbar)
         // non-null toolbar is set in the line above and it is used here
         val actionBar = requireNotNull(activity.supportActionBar)
@@ -197,10 +203,12 @@ class ScreenStackHeaderConfig(context: Context) : ViewGroup(context) {
             // which would impact the position of custom header views rendered at the center.
             toolbar.contentInsetStartWithNavigation = 0
         }
+
         val titleTextView = titleTextView
         if (mTitleColor != 0) {
             toolbar.setTitleTextColor(mTitleColor)
         }
+
         if (titleTextView != null) {
             if (mTitleFontFamily != null || mTitleFontWeight > 0) {
                 val titleTypeface = ReactTypefaceUtils.applyStyles(
@@ -218,8 +226,7 @@ class ScreenStackHeaderConfig(context: Context) : ViewGroup(context) {
 
         // color
         if (mTintColor != 0) {
-            val navigationIcon = toolbar.navigationIcon
-            navigationIcon?.setColorFilter(mTintColor, PorterDuff.Mode.SRC_ATOP)
+            toolbar.navigationIcon?.setColorFilter(mTintColor, PorterDuff.Mode.SRC_ATOP)
         }
 
         // subviews
@@ -228,6 +235,7 @@ class ScreenStackHeaderConfig(context: Context) : ViewGroup(context) {
                 toolbar.removeViewAt(i)
             }
         }
+
         var i = 0
         val size = mConfigSubviews.size
         while (i < size) {
@@ -275,9 +283,7 @@ class ScreenStackHeaderConfig(context: Context) : ViewGroup(context) {
         }
     }
 
-    fun getConfigSubview(index: Int): ScreenStackHeaderSubview {
-        return mConfigSubviews[index]
-    }
+    fun getConfigSubview(index: Int): ScreenStackHeaderSubview = mConfigSubviews[index]
 
     val configSubviewsCount: Int
         get() = mConfigSubviews.size
@@ -299,16 +305,13 @@ class ScreenStackHeaderConfig(context: Context) : ViewGroup(context) {
 
     private val titleTextView: TextView?
         get() {
-            var i = 0
-            val size = toolbar.childCount
-            while (i < size) {
+            for (i in 0 until toolbar.childCount) {
                 val view = toolbar.getChildAt(i)
                 if (view is TextView) {
                     if (view.text == toolbar.title) {
                         return view
                     }
                 }
-                i++
             }
             return null
         }
@@ -369,7 +372,7 @@ class ScreenStackHeaderConfig(context: Context) : ViewGroup(context) {
         mDirection = direction
     }
 
-    private class DebugMenuToolbar(context: Context) : Toolbar(context) {
+    private class DebugMenuToolbar(context: Context, config: ScreenStackHeaderConfig) : CustomToolbar(context, config) {
         override fun showOverflowMenu(): Boolean {
             (context.applicationContext as ReactApplication)
                 .reactNativeHost
@@ -381,7 +384,7 @@ class ScreenStackHeaderConfig(context: Context) : ViewGroup(context) {
 
     init {
         visibility = GONE
-        toolbar = if (BuildConfig.DEBUG) DebugMenuToolbar(context) else Toolbar(context)
+        toolbar = if (BuildConfig.DEBUG) DebugMenuToolbar(context, this) else CustomToolbar(context, this)
         mDefaultStartInset = toolbar.contentInsetStart
         mDefaultStartInsetWithNavigation = toolbar.contentInsetStartWithNavigation
 
